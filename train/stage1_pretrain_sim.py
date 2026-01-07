@@ -9,41 +9,42 @@ from utils.utils import load_cfg, save_model
 import os
 
 # ------------------------------
-# 1️⃣ 配置和设备初始化
+# 1 配置和设备初始化
 # ------------------------------
 cfg = load_cfg("config/pcvae_gan.yaml")   #
 # 读取 YAML 配置
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # ------------------------------
-# 2️⃣ 数据加载
+# 2️ 数据加载
 # ------------------------------
 sim_dataset = SimDataset(cfg['data']['sim_path'])
 sim_loader = DataLoader(sim_dataset, batch_size=cfg['train']['batch_size'], shuffle=True)
 
 # ------------------------------
-# 3️⃣ 模型 + 优化器
+# 3️ 模型 + 优化器
 # ------------------------------
 vae = VAEModel(z_dim=cfg['model']['z_dim']).to(device)
 optimizer = torch.optim.Adam(vae.parameters(), lr=cfg['train']['lr_vae'])
 
 # ------------------------------
-# 4️⃣ 训练循环
+# 4️ 训练循环
 # ------------------------------
 for epoch in range(cfg['train']['epochs_stage1']):
     total_loss = 0
     for x_wrap, phi_gt in sim_loader:
-        # 1️⃣ 将数据送入设备
+        # 1️ 将数据送入设备
         x_wrap, phi_gt = x_wrap.to(device), phi_gt.to(device)
 
-        # 2️⃣ 梯度清零
+        # 2️ 梯度清零
         optimizer.zero_grad()
 
-        # 3️⃣ forward：Encoder -> latent -> Decoder
+        # 3️
+        # forward：Encoder -> latent -> Decoder
         phi_hat, mu, logvar, z = vae(x_wrap)
 
         # ------------------------------
-        # 4️⃣ 损失计算
+        # 4️ 损失计算
         # ------------------------------
         # 4.1 监督损失（模拟数据）
         L_sup = sup_loss(phi_hat, phi_gt)
@@ -66,19 +67,19 @@ for epoch in range(cfg['train']['epochs_stage1']):
             cfg['train']['kl_weight'] * L_kl
         )
 
-        # 5️⃣ 反向传播
+        # 5️ 反向传播
         loss.backward()
         optimizer.step()
 
         total_loss += loss.item()
 
     # ------------------------------
-    # 6️⃣ 日志打印
+    # 6️ 日志打印
     # ------------------------------
     avg_loss = total_loss / len(sim_loader)
     print(f"Epoch [{epoch+1}/{cfg['train']['epochs_stage1']}], Avg Loss: {avg_loss:.4f}")
 
-    # 7️⃣ 每 N epoch 保存模型
+    # 7️ 每 N epoch 保存模型
     if (epoch+1) % 10 == 0:
         save_path = os.path.join("checkpoints", f"vae_stage1_epoch{epoch+1}.pth")
         os.makedirs("checkpoints", exist_ok=True)

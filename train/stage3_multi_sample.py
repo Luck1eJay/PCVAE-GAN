@@ -8,19 +8,19 @@ from losses.kl_loss import kl_loss
 from utils.utils import load_cfg, save_model
 
 # ------------------------------
-# 1️⃣ 配置 & 设备
+# 1️ 配置 & 设备
 # ------------------------------
 cfg = load_cfg("config/pcvae_gan.yaml")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # ------------------------------
-# 2️⃣ 数据（只用真实 wrap）
+# 2️ 数据（只用真实 wrap）
 # ------------------------------
 real_dataset = RealDataset(cfg['data']['real_path'])
 real_loader = DataLoader(real_dataset, batch_size=cfg['train']['batch_size'], shuffle=True)
 
 # ------------------------------
-# 3️⃣ 模型
+# 3️ 模型
 # ------------------------------
 vae = VAEModel(z_dim=cfg['model']['z_dim']).to(device)
 vae.load_state_dict(torch.load("checkpoints/vae_stage2.pth"))
@@ -28,12 +28,12 @@ vae.load_state_dict(torch.load("checkpoints/vae_stage2.pth"))
 optimizer = torch.optim.Adam(vae.parameters(), lr=cfg['train']['lr_vae'])
 
 # ------------------------------
-# 4️⃣ 多解采样数
+# 4️ 多解采样数
 # ------------------------------
 N_samples = 4   # 每个输入采 4 个 latent
 
 # ------------------------------
-# 5️⃣ 训练
+# 5️ 训练
 # ------------------------------
 for epoch in range(cfg['train']['epochs_stage3']):
     for x_wrap in real_loader:
@@ -73,6 +73,6 @@ for epoch in range(cfg['train']['epochs_stage3']):
     print(f"[Stage3][Epoch {epoch+1}] Loss={loss.item():.4f}")
 
 # ------------------------------
-# 6️⃣ 保存模型
+# 6️ 保存模型
 # ------------------------------
 save_model(vae, "checkpoints/vae_stage3.pth")

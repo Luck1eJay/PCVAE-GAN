@@ -9,13 +9,13 @@ from utils.utils import load_cfg, save_model
 import os
 
 # ------------------------------
-# 1️⃣ 配置 & 设备
+# 1️ 配置 & 设备
 # ------------------------------
 cfg = load_cfg("config/pcvae_gan.yaml")
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
 # ------------------------------
-# 2️⃣ 数据
+# 2️ 数据
 # ------------------------------
 sim_dataset = SimDataset(cfg['data']['sim_path'])
 real_dataset = RealDataset(cfg['data']['real_path'])
@@ -24,7 +24,7 @@ sim_loader = DataLoader(sim_dataset, batch_size=cfg['train']['batch_size'], shuf
 real_loader = DataLoader(real_dataset, batch_size=cfg['train']['batch_size'], shuffle=True)
 
 # ------------------------------
-# 3️⃣ 模型
+# 3️ 模型
 # ------------------------------
 vae = VAEModel(z_dim=cfg['model']['z_dim']).to(device)
 disc = LatentDiscriminator(z_dim=cfg['model']['z_dim']).to(device)
@@ -37,13 +37,13 @@ for p in vae.decoder.parameters():
     p.requires_grad = False
 
 # ------------------------------
-# 4️⃣ 优化器
+# 4️ 优化器
 # ------------------------------
 opt_E = torch.optim.Adam(vae.encoder.parameters(), lr=cfg['train']['lr_vae'])
 opt_D = torch.optim.Adam(disc.parameters(), lr=cfg['train']['lr_disc'])
 
 # ------------------------------
-# 5️⃣ 训练
+# 5️ 训练
 # ------------------------------
 for epoch in range(cfg['train']['epochs_stage2']):
     for (x_sim, _), x_real in zip(sim_loader, real_loader):
@@ -82,7 +82,7 @@ for epoch in range(cfg['train']['epochs_stage2']):
     print(f"[Stage2][Epoch {epoch+1}] D_loss={loss_D.item():.4f}, G_loss={loss_G.item():.4f}")
 
 # ------------------------------
-# 6️⃣ 保存模型
+# 6️ 保存模型
 # ------------------------------
 os.makedirs("checkpoints", exist_ok=True)
 save_model(vae, "checkpoints/vae_stage2.pth")
