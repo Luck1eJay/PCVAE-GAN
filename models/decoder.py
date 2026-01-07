@@ -2,37 +2,46 @@ import torch
 import torch.nn as nn
 
 class Decoder(nn.Module):
-    def __init__(self, channels=None, z_dim=32):
+    def __init__(self, latent_dim=64, base_channels=32, output_channels=1):
+        """
+        latent_dim: latent space 维度
+        base_channels: decoder 基础卷积通道数
+        output_channels: 输出相位图通道数，一般为1
+        """
         super().__init__()
-        # 避免使用可变默认参数
-        if channels is None:
-            channels = [64, 32, 1]
 
-        self._channels = channels
-        self.fc = nn.Linear(z_dim, channels[0] * 8 * 8)
+        # 将 latent vector 扩展成 feature map
+        self.fc = nn.Linear(latent_dim, base_channels*8*4*4)  # 假设最低分辨率 4x4
 
-        layers = []
-        for i in range(len(channels) - 1):
-            layers.append(
-                nn.ConvTranspose2d(
-                    channels[i],
-                    channels[i+1],
-                    kernel_size=4,
-                    stride=2,
-                    padding=1
-                )
-            )
-            if i < len(channels) - 2:
-                layers.append(nn.ReLU())
+        # 转置卷积上采样
+        self.upconv = nn.Sequential(
+            nn.ConvTranspose2d(base_channels*8, base_channels*4, 4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(base_channels*4, base_channels*2, 4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(base_channels*2, base_channels, 4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(base_channels, output_channels, 3, stride=1, padding=1)
+        )
 
-        self.deconv = nn.Sequential(*layers)
-
-    def forward(self, x_wrap, z):
+    def forward(self, z):
         """
-        保留 x_wrap 参数以兼容现有调用签名，但当前实现未使用 x_wrap。
-        将 fc 输出 reshape 时使用 channels[0] 而非硬编码 64。
+        z: [batch, latent_dim] 或 [batch, n_samples, latent_dim]
+        返回: [batch, 1, H, W] 或 [batch, n_samples, 1, H, W]
         """
-        c0 = self._channels[0]
-        h = self.fc(z).view(-1, c0, 8, 8)
-        phi = self.deconv(h)
-        return phi
+        is_multi = False
+        if z.dim() == 3:
+            # batch × n_samples × latent_dim
+            is_multi = True
+            batch, n_samples, latent_dim = z.size()
+            z = z.view(batch*n_samples, latent_dim)
+
+        h = self.fc(z).unsqueeze(-1).unsqueeze(-1)  # [batch*n_samples, channels, 1, 1] → 4x4
+        out = self.upconv(h)
+
+        if is_multi:
+            batch = batch
+            out = out.view(batch, n_samples, *out.shape[1:])
+        return out
+
+

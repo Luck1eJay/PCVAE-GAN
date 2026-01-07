@@ -5,7 +5,7 @@ from data.real_dataset import RealDataset
 from losses.wrap_loss import wrap_loss
 from losses.vae_loss import diversity_loss
 from losses.kl_loss import kl_loss
-from utils.utils import load_cfg, save_model
+from utils.metrics import load_cfg, save_model
 
 # ------------------------------
 # 1️ 配置 & 设备

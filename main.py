@@ -1,6 +1,6 @@
 import torch
 from models.vae_model import VAEModel
-from utils.utils import load_cfg, reparameterize
+from utils.metrics import load_cfg, reparameterize
 import numpy as np
 
 # 加载配置信息

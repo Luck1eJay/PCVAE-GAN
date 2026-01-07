@@ -2,33 +2,37 @@ import torch
 import torch.nn as nn
 
 class Encoder(nn.Module):
-    """
-    VAE Encoder
-    输入：wrap 图像 x_wrap (B, C, H, W)
-    输出：latent 分布参数 mu, logvar
-    """
-    def __init__(self, channels=None, z_dim=32):
+    def __init__(self, input_channels=1, latent_dim=64, base_channels=32):
         super().__init__()
-        if channels is None:
-            channels = [1, 32, 64]
-        self._channels = channels
-
-        layers = []
-        for i in range(len(channels)-1):
-            layers.append(nn.Conv2d(channels[i], channels[i+1], 3, stride=2, padding=1))
-            layers.append(nn.ReLU())
-        self.conv = nn.Sequential(*layers)
-
-        # 使用全局自适应池化避免对输入 HxW 做硬编码假设
-        self.global_pool = nn.AdaptiveAvgPool2d((1, 1))
-        self.flatten = nn.Flatten()
-        self.fc_mu = nn.Linear(channels[-1] * 1 * 1, z_dim)
-        self.fc_logvar = nn.Linear(channels[-1] * 1 * 1, z_dim)
+        self.latent_dim = latent_dim
+        self.conv = nn.Sequential(
+            nn.Conv2d(input_channels, base_channels, 3, stride=1, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(base_channels, base_channels*2, 3, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(base_channels*2, base_channels*4, 3, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(base_channels*4, base_channels*8, 3, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+        )
+        self.adaptive_pool = nn.AdaptiveAvgPool2d(1)
+        self.fc_mu = nn.Linear(base_channels*8, latent_dim)
+        self.fc_logvar = nn.Linear(base_channels*8, latent_dim)
 
     def forward(self, x):
+        batch_size = x.size(0)
         h = self.conv(x)
-        h = self.global_pool(h)
-        h = self.flatten(h)
+        h = self.adaptive_pool(h)
+        h = h.view(batch_size, -1)
         mu = self.fc_mu(h)
         logvar = self.fc_logvar(h)
         return mu, logvar
+
+    def sample(self, mu, logvar, n_samples=1):
+        """Reparameterization trick with multiple samples"""
+        batch_size, latent_dim = mu.size()
+        eps = torch.randn(batch_size, n_samples, latent_dim, device=mu.device)
+        z = mu.unsqueeze(1) + eps * torch.exp(0.5 * logvar).unsqueeze(1)
+        # z: [batch, n_samples, latent_dim]
+        return z
+

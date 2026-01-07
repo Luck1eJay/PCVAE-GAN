@@ -1,30 +1,26 @@
 import torch
-import torch.nn as nn
+import torch.nn.functional as F
 
-mse_loss = nn.MSELoss()
+def kl_loss(mu, logvar):
+    """
+    KL Divergence between latent distribution and N(0,I)
+    mu: [batch, latent_dim]
+    logvar: [batch, latent_dim]
+    """
+    return -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
 
-def geometric_loss(phi_pred, phi_gt):
+def geo_loss(phi_hat, phi_sim):
     """
-    模拟数据上的几何监督损失
-    L_geo = || phi_pred - phi_gt ||_2^2
+    L1 Reconstruction loss on simulated data
+    phi_hat: [batch, H, W]
+    phi_sim: [batch, H, W]
     """
-    return mse_loss(phi_pred, phi_gt)
+    return F.l1_loss(phi_hat, phi_sim)
 
-def kl_divergence(mu, logvar):
+def vae_loss(phi_hat, phi_sim, mu, logvar, lambda_geo=1.0, lambda_kl=0.01):
     """
-    KL 散度约束隐变量分布
-    L_KL = D_KL(q(z|x_sim) || N(0,I))
+    Combined VAE loss: weighted sum of geo + KL
     """
-    batch_size = mu.size(0)
-    kl = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    return kl / batch_size
-
-def vae_loss(phi_pred, phi_gt, mu, logvar, kl_weight=1e-3):
-    """
-    总 VAE loss
-    L_VAE = L_geo + kl_weight * L_KL
-    返回 (总 loss, L_geo, L_KL)
-    """
-    L_geo = geometric_loss(phi_pred, phi_gt)
-    L_kl = kl_divergence(mu, logvar) * kl_weight
-    return L_geo + L_kl, L_geo, L_kl
+    loss_geo = geo_loss(phi_hat, phi_sim)
+    loss_kl = kl_loss(mu, logvar)
+    return lambda_geo * loss_geo + lambda_kl * loss_kl

@@ -1,13 +1,11 @@
 import torch
-import torch.nn as nn
+import torch.nn.functional as F
 
-mse_loss = nn.MSELoss()
-
-def wrap_loss(phi_pred, x_real, wrap_func):
+def wrap_loss(phi_hat, x_real, wrap_fn):
     """
-    物理一致性损失：保证解缠后的相位经过缠绕算子后与真实观测相位一致
+    Physics / wrap consistency loss
+    phi_hat: [batch, H, W] decoder output
+    x_real: [batch, H, W] real wrapped phase
+    wrap_fn: function W(phi) -> [-pi, pi)
     """
-    phi_wrapped = wrap_func(phi_pred)
-    loss = mse_loss(phi_wrapped, x_real)
-    return loss
-
+    return F.l1_loss(wrap_fn(phi_hat), x_real)
