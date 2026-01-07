@@ -15,7 +15,6 @@ def kl_divergence(mu, logvar):
     KL 散度约束隐变量分布
     L_KL = D_KL(q(z|x_sim) || N(0,I))
     """
-    # 按 batch 求平均
     batch_size = mu.size(0)
     kl = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return kl / batch_size

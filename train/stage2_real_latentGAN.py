@@ -4,7 +4,7 @@ from models.vae_model import VAEModel
 from models.discriminator import LatentDiscriminator
 from data.sim_dataset import SimDataset
 from data.real_dataset import RealDataset
-from losses.gan_loss import gan_loss_D, gan_loss_G
+from losses.latent_gan_loss import gan_loss_D, gan_loss_G
 from utils.utils import load_cfg, save_model
 import os
 
