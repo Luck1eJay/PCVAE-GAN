@@ -1,26 +1,39 @@
-# ---------------------------
-# PCVAE-GAN 参数配置文件
-# ---------------------------
-data:
-  sim_path: "data/sim/"        # 模拟 wrap + phi 数据路径
-  real_path: "data/real/"      # 真实 wrap 数据路径
-
+# config/pcvae_gan_finetune.yaml
 model:
-  z_dim: 32                    # VAE latent 维度
-  encoder_channels: [1,32,64]  # Encoder 卷积通道
-  decoder_channels: [64,32,1]  # Decoder 卷积通道
+  name: PCVAE-GAN
+  latent_dim: 64
 
 train:
-  batch_size: 8
-  lr_vae: 1e-4
-  lr_disc: 1e-4
-  epochs_stage1: 50
-  epochs_stage2: 50
-  epochs_stage3: 30
-  kl_weight: 0.1
-  gan_weight: 0.01
-  diversity_weight: 0.05
+  batch_size: 16
+  lr_encoder: 1e-4
+  lr_discriminator: 1e-4
+  lr_decoder: 1e-4
+  num_epochs_stage1: 50
+  num_epochs_stage2: 50
+  num_epochs_stage3: 50
+  checkpoint_dir: checkpoints
+  device: cuda
+
+data:
+  sim_data: "/DATASET/WRAP"    # 模拟缠绕相位
+  sim_phi: "/DATASET/TRUE"     # 模拟连续相位
+  real_data: "/DATASET/REAL"   # 真实 wrap 数据
 
 loss:
-  sup_weight: 1.0
-  wrap_weight: 0.5
+  beta: 1.0           # KL 损失权重
+  lambda_div: 0.1     # 多解多样性权重
+  lambda_gp: 10.0     # R3GAN gradient penalty
+  lambda_wrap: 1.0    # wrap/物理损失权重
+  lambda_grad: 1.0    # gradient loss 权重
+
+# -----------------------------
+# Finetune Settings
+# -----------------------------
+finetune:
+  enable: true
+  stage_to_start: 2                 # 从 Stage2 或 Stage3 开始微调
+  load_checkpoint: "checkpoints/stage2/checkpoint_epoch50.pth"  # 要加载的 checkpoint
+  freeze_decoder: true              # 是否冻结 decoder
+  new_lr_encoder: 1e-5              # 微调 encoder 的新学习率
+  new_lr_discriminator: 1e-5        # 微调 discriminator 的新学习率
+  new_lr_decoder: 1e-5               # 微调 decoder 学习率（如果未冻结）

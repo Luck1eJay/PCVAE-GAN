@@ -3,9 +3,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
-import yaml
 
-# 导入模型和 loss
 from models.encoder import Encoder
 from models.decoder import Decoder
 from losses.vae_loss import kl_loss, geo_loss
@@ -13,12 +11,7 @@ from losses.diversity_loss import diversity_loss
 from data.dataset import PhaseDataset
 
 def train_stage1(cfg, checkpoint_dir, device='cuda'):
-    """
-    Stage1: VAE training (simulated data)
-    cfg: 配置字典
-    checkpoint_dir: 保存 checkpoint 的目录
-    device: 'cuda' or 'cpu'
-    """
+    """Stage1: VAE training (simulated data)"""
     train_cfg = cfg['train']
     data_cfg = cfg['data']
     loss_cfg = cfg['loss']
@@ -26,13 +19,13 @@ def train_stage1(cfg, checkpoint_dir, device='cuda'):
     batch_size = train_cfg['batch_size']
     lr = train_cfg['lr']
     num_epochs = train_cfg['num_epochs_stage1']
-    latent_dim = train_cfg['latent_dim']
+    latent_dim = train_cfg['model']['latent_dim']
 
     lambda_kl = loss_cfg.get('beta', 1.0)
     lambda_div = loss_cfg.get('lambda_div', 0.1)
 
     # ---------------------------
-    # 初始化模型
+    # 模型
     # ---------------------------
     encoder = Encoder(latent_dim=latent_dim).to(device)
     decoder = Decoder(latent_dim=latent_dim).to(device)
@@ -47,7 +40,7 @@ def train_stage1(cfg, checkpoint_dir, device='cuda'):
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     # ---------------------------
-    # Stage1 Training
+    # 训练
     # ---------------------------
     for epoch in range(1, num_epochs + 1):
         encoder.train()
@@ -58,26 +51,17 @@ def train_stage1(cfg, checkpoint_dir, device='cuda'):
             x_sim = x_sim.to(device)
             phi_sim = phi_sim.to(device)
 
-            # -----------------
-            # Forward pass
-            # -----------------
             mu, logvar = encoder(x_sim)
             eps = torch.randn_like(mu)
             z = mu + eps * torch.exp(0.5 * logvar)
             phi_hat = decoder(z)
 
-            # -----------------
-            # Loss
-            # -----------------
             loss_geo = geo_loss(phi_hat, phi_sim)
             loss_kl = kl_loss(mu, logvar)
-            loss_div = diversity_loss(phi_hat)  # optional
+            loss_div = diversity_loss(phi_hat)
 
             loss_total = loss_geo + lambda_kl * loss_kl + lambda_div * loss_div
 
-            # -----------------
-            # Backprop
-            # -----------------
             opt_enc.zero_grad()
             opt_dec.zero_grad()
             loss_total.backward()
@@ -87,12 +71,11 @@ def train_stage1(cfg, checkpoint_dir, device='cuda'):
             total_loss_epoch += loss_total.item()
 
         avg_loss = total_loss_epoch / len(train_loader)
-        print(f"[Stage1] Epoch {epoch}/{num_epochs}, Avg Loss: {avg_loss:.4f}")
+        if epoch % cfg['logging'].get('print_interval', 1) == 0:
+            print(f"[Stage1] Epoch {epoch}/{num_epochs}, Avg Loss: {avg_loss:.4f}")
 
-        # -----------------
-        # Save checkpoint every 10 epochs
-        # -----------------
-        if epoch % 10 == 0:
+        # checkpoint
+        if epoch % cfg['logging'].get('save_interval', 10) == 0:
             os.makedirs(checkpoint_dir, exist_ok=True)
             checkpoint_path = os.path.join(checkpoint_dir, f'checkpoint_epoch{epoch}.pth')
             torch.save({
@@ -104,6 +87,4 @@ def train_stage1(cfg, checkpoint_dir, device='cuda'):
             }, checkpoint_path)
             print(f"Checkpoint saved: {checkpoint_path}")
 
-    print("Stage1 training finished.")
     return encoder, decoder
-

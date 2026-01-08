@@ -1,6 +1,5 @@
 import os
 import torch
-import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 
@@ -22,14 +21,14 @@ def train_stage3(cfg, stage2_ckpt_dir, checkpoint_dir, device='cuda'):
     lr_enc = train_cfg['lr_encoder']
     lr_dec = train_cfg['lr_decoder']
     num_epochs = train_cfg['num_epochs_stage3']
+    latent_dim = train_cfg['model']['latent_dim']
 
     lambda_wrap = loss_cfg.get('lambda_wrap', 1.0)
     lambda_grad = loss_cfg.get('lambda_grad', 1.0)
 
     # ---------------------------
-    # 初始化模型
+    # 模型
     # ---------------------------
-    latent_dim = train_cfg['latent_dim']
     encoder = Encoder(latent_dim=latent_dim).to(device)
     decoder = Decoder(latent_dim=latent_dim).to(device)
 
@@ -39,13 +38,12 @@ def train_stage3(cfg, stage2_ckpt_dir, checkpoint_dir, device='cuda'):
     # ---------------------------
     # 加载 Stage2 checkpoint
     # ---------------------------
-    stage2_ckpt_path = os.path.join(stage2_ckpt_dir, 'checkpoint_epoch10.pth')
+    stage2_ckpt_path = os.path.join(stage2_ckpt_dir, f"checkpoint_epoch{train_cfg.get('stage2_load_epoch',10)}.pth")
     ckpt = torch.load(stage2_ckpt_path, map_location=device)
     encoder.load_state_dict(ckpt['encoder_state_dict'])
     print(f"Loaded Stage2 encoder checkpoint from {stage2_ckpt_path}")
 
-    # Decoder 是否冻结可选
-    decoder.eval()  # 推荐先冻结
+    decoder.eval()  # 冻结 decoder
     for p in decoder.parameters():
         p.requires_grad = False
 
@@ -66,31 +64,26 @@ def train_stage3(cfg, stage2_ckpt_dir, checkpoint_dir, device='cuda'):
         for x_real in train_loader:
             x_real = x_real.to(device)
 
-            # Encoder forward
             mu_real, logvar_real = encoder(x_real)
-            eps = torch.randn_like(mu_real)
-            z_real = mu_real + eps * torch.exp(0.5 * logvar_real)
-
-            # Decoder forward
+            z_real = mu_real + torch.randn_like(mu_real) * torch.exp(0.5 * logvar_real)
             phi_hat = decoder(z_real)
 
-            # 计算物理一致性损失
             loss_wrap = wrap_loss(phi_hat, x_real)
-            loss_grad = gradient_loss(phi_hat, phi_hat.detach())  # 可以使用 phi_hat 的平滑约束
-            total_loss_batch = lambda_wrap * loss_wrap + lambda_grad * loss_grad
+            loss_grad = gradient_loss(phi_hat, phi_hat.detach())
+            loss_total = lambda_wrap * loss_wrap + lambda_grad * loss_grad
 
-            # 更新 Encoder (Decoder 冻结)
             opt_enc.zero_grad()
-            total_loss_batch.backward()
+            loss_total.backward()
             opt_enc.step()
 
-            total_loss += total_loss_batch.item()
+            total_loss += loss_total.item()
 
         avg_loss = total_loss / len(train_loader)
-        print(f"[Stage3] Epoch {epoch}/{num_epochs}, Avg Loss: {avg_loss:.4f}")
+        if epoch % cfg['logging'].get('print_interval',1) == 0:
+            print(f"[Stage3] Epoch {epoch}/{num_epochs}, Avg Loss: {avg_loss:.4f}")
 
-        # 保存 checkpoint
-        if epoch % 10 == 0:
+        # checkpoint
+        if epoch % cfg['logging'].get('save_interval',10) == 0:
             os.makedirs(checkpoint_dir, exist_ok=True)
             checkpoint_path = os.path.join(checkpoint_dir, f'checkpoint_epoch{epoch}.pth')
             torch.save({
@@ -102,6 +95,4 @@ def train_stage3(cfg, stage2_ckpt_dir, checkpoint_dir, device='cuda'):
             }, checkpoint_path)
             print(f"Checkpoint saved: {checkpoint_path}")
 
-    print("Stage3 training finished.")
     return encoder, decoder
-
