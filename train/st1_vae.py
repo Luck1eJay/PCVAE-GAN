@@ -58,9 +58,10 @@ def train_stage1(cfg, checkpoint_dir, device='cuda'):
 
             loss_geo = geo_loss(phi_hat, phi_sim)
             loss_kl = kl_loss(mu, logvar)
-            loss_div = diversity_loss(phi_hat)
+            # loss_div = diversity_loss(phi_hat)
 
-            loss_total = loss_geo + lambda_kl * loss_kl + lambda_div * loss_div
+            # loss_total = loss_geo + lambda_kl * loss_kl + lambda_div * loss_div
+            loss_total = loss_geo + lambda_kl * loss_kl
 
             opt_enc.zero_grad()
             opt_dec.zero_grad()
