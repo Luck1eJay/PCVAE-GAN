@@ -26,7 +26,7 @@ def train_stage1(cfg, checkpoint_dir, device='cuda'):
     lr_dec = train_cfg.lr_decoder
 
     lambda_kl = loss_cfg.beta
-
+    lambda_div =loss_cfg.lambda_div
     # ---------------------------
     # 模型
     # ---------------------------
