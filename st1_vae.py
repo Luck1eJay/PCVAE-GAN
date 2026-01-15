@@ -8,7 +8,8 @@ import matplotlib.pyplot as plt
 from models.encoder import Encoder
 from models.decoder import Decoder
 from losses.vae_loss import kl_loss, geo_loss
-from losses.diversity_loss import diversity_loss
+# from losses.diversity_loss import diversity_loss
+from losses.gradient_loss import gradient_loss
 from data.dataset import PhaseDataset
 
 def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
@@ -21,21 +22,23 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
     loss_cfg = cfg['loss']
 
     batch_size = train_cfg['batch_size']
-    lr = train_cfg['lr_encoder']
+    lr_encoder = train_cfg['lr_encoder']
+    lr_decoder = train_cfg['lr_decoder']
+
     num_epochs = train_cfg['num_epochs_stage1']
     latent_dim = cfg['model']['latent_dim']
 
     lambda_kl = loss_cfg.get('beta', 1.0)
-    lambda_div = loss_cfg.get('lambda_div', 0.1)
-
+    # lambda_div = loss_cfg.get('lambda_div', 0.1)
+    lambda_grad = loss_cfg.get('lambda_grad', 1.0)
     # ---------------------------
     # 模型
     # ---------------------------
     encoder = Encoder(latent_dim=latent_dim).to(device)
     decoder = Decoder(latent_dim=latent_dim).to(device)
 
-    opt_enc = optim.Adam(encoder.parameters(), lr=lr)
-    opt_dec = optim.Adam(decoder.parameters(), lr=lr)
+    opt_enc = optim.Adam(encoder.parameters(), lr=lr_encoder)
+    opt_dec = optim.Adam(decoder.parameters(), lr=lr_decoder)
 
     # ---------------------------
     # 数据
@@ -92,7 +95,12 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
             # phi_sim: [B, 1, H, W] -> 扩展到 [B, K, 1, H, W] 方便计算
             phi_sim_expand = phi_sim.unsqueeze(1).expand(-1, n_samples, -1, -1, -1)
             l1_all = torch.abs(phi_hat.squeeze(2) - phi_sim_expand.squeeze(2))  # [B, K, H, W]
-            loss_geo = l1_all.view(batch_size, n_samples, -1).mean(dim=2).min(dim=1)[0].mean()  # best-of-K
+            l1_mean = l1_all.view(batch_size, n_samples, -1).mean(dim=2)
+            loss_geo = l1_mean.min(dim=1)[0].mean()  # best-of-K
+
+            best_idx = l1_mean.min(dim=1)[1]
+            phi_hat_best = phi_hat[torch.arange(batch_size, device=device), best_idx, :, :, :]  # [B, 1, H, W]
+            loss_grad = gradient_loss(phi_hat_best, phi_sim)
 
             # ---------------------------
             # KL loss
@@ -102,15 +110,22 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
             # ---------------------------
             # diversity loss
             # ---------------------------
-            loss_div = diversity_loss(phi_hat.squeeze(2))  # [B, K, H, W]
+            # loss_div = diversity_loss(phi_hat.squeeze(2))  # [B, K, H, W]
+
 
             print("x_sim range:", x_sim.min().item(), x_sim.max().item())
             print("phi_sim range:", phi_sim.min().item(), phi_sim.max().item())
-            print("loss_geo:", loss_geo.item(), "loss_kl:", loss_kl.item(), "loss_div:", loss_div.item())
+            print(
+                "loss_geo:", loss_geo.item(),
+                "loss_kl:", loss_kl.item(),
+                # "loss_div:", loss_div.item(),
+                "loss_grad:", loss_grad.item()
+            )
             # ---------------------------
             # 总损失
             # ---------------------------
-            loss_total = loss_geo + lambda_kl * loss_kl + lambda_div * loss_div
+            # loss_total = loss_geo + lambda_kl * loss_kl + lambda_div * loss_div + lambda_grad * loss_grad
+            loss_total = loss_geo + lambda_kl * loss_kl  + lambda_grad * loss_grad
 
             opt_enc.zero_grad()
             opt_dec.zero_grad()
