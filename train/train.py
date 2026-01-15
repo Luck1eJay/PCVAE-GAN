@@ -1,8 +1,7 @@
 import os
-import torch
 from omegaconf import OmegaConf
 
-from train.st1_vae import train_stage1
+from st1_vae import train_stage1
 from train.st2_latent_gan import train_stage2
 from train.st3_wrap import train_stage3
 
