@@ -9,11 +9,12 @@ class Decoder(nn.Module):
         output_channels: 输出相位图通道数，一般为1
         """
         super().__init__()
+        self.base_channels = base_channels
 
         # 将 latent vector 扩展成 feature map
-        self.fc = nn.Linear(latent_dim, base_channels*8*4*4)  # 假设最低分辨率 4x4
+        self.fc = nn.Linear(latent_dim, base_channels*8*4*4)  # 4x4
 
-        # 转置卷积上采样
+        # 转置卷积上采样（4 -> 8 -> 16 -> 32 -> 64 -> 128 -> 256）
         self.upconv = nn.Sequential(
             nn.ConvTranspose2d(base_channels*8, base_channels*4, 4, stride=2, padding=1),
             nn.ReLU(inplace=True),
@@ -21,7 +22,13 @@ class Decoder(nn.Module):
             nn.ReLU(inplace=True),
             nn.ConvTranspose2d(base_channels*2, base_channels, 4, stride=2, padding=1),
             nn.ReLU(inplace=True),
-            nn.Conv2d(base_channels, output_channels, 3, stride=1, padding=1)
+            nn.ConvTranspose2d(base_channels, base_channels//2, 4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(base_channels//2, base_channels//4, 4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.ConvTranspose2d(base_channels//4, base_channels//8, 4, stride=2, padding=1),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(base_channels//8, output_channels, 3, stride=1, padding=1)
         )
 
     def forward(self, z):
@@ -31,17 +38,13 @@ class Decoder(nn.Module):
         """
         is_multi = False
         if z.dim() == 3:
-            # batch × n_samples × latent_dim
             is_multi = True
             batch, n_samples, latent_dim = z.size()
             z = z.view(batch*n_samples, latent_dim)
 
-        h = self.fc(z).view(z.size(0), 256, 4, 4)
+        h = self.fc(z).view(z.size(0), self.base_channels*8, 4, 4)
         out = self.upconv(h)
 
         if is_multi:
-            batch = batch
             out = out.view(batch, n_samples, *out.shape[1:])
         return out
-
-
