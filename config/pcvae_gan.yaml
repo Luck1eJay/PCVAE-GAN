@@ -15,8 +15,8 @@ train:
   device: cuda:1
 
 data:
-  sim_data: "dataset/train/wrapped"    # 模拟缠绕相位
-  sim_phi: "dataset/train/labels"     # 模拟连续相位
+  sim_data: "dataset/train/train_wrapped"    # 模拟缠绕相位
+  sim_phi: "dataset/train/train_absolute"     # 模拟连续相位
   real_data: "dataset/real"   # 真实 wrap 数据
   wrap_key: "input"
   phi_key: "output"
