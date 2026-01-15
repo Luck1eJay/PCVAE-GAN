@@ -1,60 +1,68 @@
-from scipy.io import loadmat
 import os
 import torch
 from torch.utils.data import Dataset
-
+import numpy as np
+from scipy.io import loadmat
 
 class PhaseDataset(Dataset):
     """
-    基于 .mat 文件的相位展开数据集加载器。
-
-    支持两种模式：
-    1. 模拟数据（sim）：从 `wrapped` 和 `labels` 两个子目录加载缠绕相位与真实值。
-    2. 无真值数据（real）：从 `wrapped` 子目录加载真实数据。
+    支持模拟数据 (x, phi) 和真实数据 (x, None)
     """
-
-    def __init__(self, base_dir, mode='sim', transform=None, key_wrap="wrapped", key_phi="labels"):
+    def __init__(self, wrap_dir, phi_dir=None, mode='sim', transform=None,
+                 wrap_key='input', phi_key='output'):
         """
-        Args:
-            base_dir (str): 主数据文件夹路径，例如 'dataset/train'。
-            mode (str): 数据模式，'sim'（带真值）或 'real'（无真值）。
-            transform (callable): 数据变换，用于标准化或归一化处理。
-            key_wrap (str): 缠绕相位在 .mat 文件中的键名。
-            key_phi (str): 连续相位在 .mat 文件中的键名（mode='sim'时需提供）。
+        wrap_dir: 缠绕相位路径（.mat）
+        phi_dir: 连续相位路径（.mat，仅模拟数据需要）
+        mode: 'sim' 或 'real'
+        transform: 可选 transform，例如归一化
+        wrap_key: wrap .mat 中数据字段名
+        phi_key: phi .mat 中数据字段名
         """
-        self.wrap_dir = os.path.join(base_dir, "wrapped")
-        self.phi_dir = os.path.join(base_dir, "labels") if mode == 'sim' else None
+        self.wrap_dir = wrap_dir
+        self.phi_dir = phi_dir
         self.mode = mode
         self.transform = transform
-        self.key_wrap = key_wrap
-        self.key_phi = key_phi
+        self.wrap_key = wrap_key
+        self.phi_key = phi_key
 
-        # 载入文件名
-        self.wrap_files = sorted(os.listdir(self.wrap_dir))
-        if mode == 'sim':  # 模拟数据才需要labels文件夹
-            assert self.phi_dir, "模拟数据设置必须提供连续相位路径."
-            self.phi_files = sorted(os.listdir(self.phi_dir))
-            assert len(self.wrap_files) == len(self.phi_files), "wrapped 与 labels 文件数不匹配！"
+        # 仅保留 .mat 文件，并按数值顺序排序
+        self.wrap_files = self._sorted_mat_files(wrap_dir)
+
+        if mode == 'sim':
+            assert phi_dir is not None, "模拟数据需要提供 phi_dir"
+            self.phi_files = self._sorted_mat_files(phi_dir)
+            assert len(self.wrap_files) == len(self.phi_files), "模拟 x 与 phi 文件数不一致"
+
+    def _sorted_mat_files(self, directory):
+        files = [f for f in os.listdir(directory) if f.lower().endswith('.mat')]
+        # 依据文件名中的数字排序，如 000001.mat, 000002.mat
+        files.sort(key=lambda x: int(os.path.splitext(x)[0]))
+        return files
 
     def __len__(self):
         return len(self.wrap_files)
 
+    def _load_mat(self, file_path, key):
+        mat = loadmat(file_path)
+        if key not in mat:
+            raise KeyError(f"在 {file_path} 中找不到字段 '{key}'")
+        data = mat[key]
+        # 确保 float32
+        return torch.from_numpy(np.array(data, dtype=np.float32))
+
     def __getitem__(self, idx):
-        # 读取缠绕相位
-        wrap_file = os.path.join(self.wrap_dir, self.wrap_files[idx])
-        wrap_mat = loadmat(wrap_file)
-        x_wrap = torch.tensor(wrap_mat[self.key_wrap], dtype=torch.float32)  # 加载为 Tensor
+        # 加载 wrap 相位
+        wrap_path = os.path.join(self.wrap_dir, self.wrap_files[idx])
+        x = self._load_mat(wrap_path, self.wrap_key)
 
-        x_phi = None
+        phi = None
         if self.mode == 'sim':
-            label_file = os.path.join(self.phi_dir, self.phi_files[idx])
-            phi_mat = loadmat(label_file)
-            x_phi = torch.tensor(phi_mat[self.key_phi], dtype=torch.float32)  # 加载为 Tensor
+            phi_path = os.path.join(self.phi_dir, self.phi_files[idx])
+            phi = self._load_mat(phi_path, self.phi_key)
 
-        # 应用数据变换（如果提供）
         if self.transform:
-            x_wrap = self.transform(x_wrap)
-            if x_phi is not None:
-                x_phi = self.transform(x_phi)
+            x = self.transform(x)
+            if phi is not None:
+                phi = self.transform(phi)
 
-        return x_wrap, x_phi
+        return x, phi
