@@ -187,7 +187,7 @@ if __name__ == '__main__':
     # ---------------------------
     # 1. 加载配置
     # ---------------------------
-    config_path = '/home/junjie/PCVAE-GAN/config/pcvae_gan.yaml'
+    config_path = 'config/pcvae_gan.yaml'
     cfg = OmegaConf.load(config_path)
     print("Config loaded:")
     print(cfg)
