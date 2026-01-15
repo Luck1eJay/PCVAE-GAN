@@ -89,9 +89,9 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
             # ---------------------------
             # 监督损失: best-of-K L1
             # ---------------------------
-            # phi_sim: [B, 1, H, W] -> 扩展到 [B, K, H, W] 方便计算
-            phi_sim_expand = phi_sim.unsqueeze(1).expand(-1, n_samples, -1, -1)
-            l1_all = torch.abs(phi_hat.squeeze(2) - phi_sim_expand)  # [B, K, H, W]
+            # phi_sim: [B, 1, H, W] -> 扩展到 [B, K, 1, H, W] 方便计算
+            phi_sim_expand = phi_sim.unsqueeze(1).expand(-1, n_samples, -1, -1, -1)
+            l1_all = torch.abs(phi_hat.squeeze(2) - phi_sim_expand.squeeze(2))  # [B, K, H, W]
             loss_geo = l1_all.view(batch_size, n_samples, -1).mean(dim=2).min(dim=1)[0].mean()  # best-of-K
 
             # ---------------------------
