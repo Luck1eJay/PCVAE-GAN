@@ -48,6 +48,7 @@ class PhaseDataset(Dataset):
             raise KeyError(f"在 {file_path} 中找不到字段 '{key}'")
         data = mat[key]
         # 确保 float32
+
         return torch.from_numpy(np.array(data, dtype=np.float32))
 
     def __getitem__(self, idx):
