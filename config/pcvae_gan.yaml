@@ -17,7 +17,7 @@ train:
 data:
   sim_data: "/dataset/train/wrapped"    # 模拟缠绕相位
   sim_phi: "/dataset/train/label"     # 模拟连续相位
-  real_data: "/DATASET/REAL"   # 真实 wrap 数据
+  real_data: "/dataset/real"   # 真实 wrap 数据
 
 loss:
   beta: 1.0           # KL 损失权重
