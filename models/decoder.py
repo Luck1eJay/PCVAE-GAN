@@ -36,7 +36,7 @@ class Decoder(nn.Module):
             batch, n_samples, latent_dim = z.size()
             z = z.view(batch*n_samples, latent_dim)
 
-        h = self.fc(z).unsqueeze(-1).unsqueeze(-1)  # [batch*n_samples, channels, 1, 1] → 4x4
+        h = self.fc(z).view(z.size(0), 256, 4, 4)
         out = self.upconv(h)
 
         if is_multi:
