@@ -26,7 +26,7 @@ loss:
   lambda_div: 0.1     # 多解多样性权重
   lambda_gp: 10.0     # R3GAN gradient penalty
   lambda_wrap: 1.0    # wrap/物理损失权重
-  lambda_grad: 1.0    # gradient loss 权重
+  lambda_grad: 0.3    # gradient loss 权重
 
 # -----------------------------
 # Finetune Settings
