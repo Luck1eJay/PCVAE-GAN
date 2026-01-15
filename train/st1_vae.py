@@ -1,4 +1,3 @@
-
 import os
 import torch
 import torch.nn as nn
@@ -41,7 +40,13 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
     # ---------------------------
     # 数据
     # ---------------------------
-    train_dataset = PhaseDataset(wrap_dir=data_cfg['sim_data'], phi_dir=data_cfg['sim_phi'], mode='sim')
+    train_dataset = PhaseDataset(
+        wrap_dir=data_cfg['sim_data'],
+        phi_dir=data_cfg['sim_phi'],
+        mode='sim',
+        wrap_key=data_cfg.get('wrap_key', 'input'),
+        phi_key=data_cfg.get('phi_key', 'output'),
+    )
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
 
     # ---------------------------
@@ -51,6 +56,10 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
         encoder.train()
         decoder.train()
         total_loss_epoch = 0.0
+
+        last_x_sim = None
+        last_phi_sim = None
+        last_phi_hat = None
 
         for x_sim, phi_sim in train_loader:
             x_sim = x_sim.to(device)
@@ -72,6 +81,10 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
             # Decoder forward
             # ---------------------------
             phi_hat = decoder(z)  # [B, K, 1, H, W]
+
+            last_x_sim = x_sim
+            last_phi_sim = phi_sim
+            last_phi_hat = phi_hat
 
             # ---------------------------
             # 监督损失: best-of-K L1
@@ -123,23 +136,46 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
             print(f"Checkpoint saved: {checkpoint_path}")
 
         # ---------------------------
-        # 可视化最后一个 batch 的多解
+        # 可视化：wrapped + labels + 多解输出（每张子图独立 colorbar）
         # ---------------------------
-        encoder.eval()
-        decoder.eval()
-        with torch.no_grad():
-            # 只取 batch 的前 4 个样本，每个样本显示 K 个解
-            n_plot = min(4, x_sim.size(0))
-            for i in range(n_plot):
-                plt.figure(figsize=(3*n_samples, 3))
+        if last_phi_hat is not None:
+            encoder.eval()
+            decoder.eval()
+            with torch.no_grad():
+                idx = last_phi_hat.size(0) - 1  # 最后一张
+                wrapped = last_x_sim[idx, 0].cpu()
+                label = last_phi_sim[idx, 0].cpu()
+                outputs = last_phi_hat[idx, :, 0].cpu()  # [K, H, W]
+
+                # labels 与 outputs 使用同一范围（真实相位范围）
+                vmin_label = label.min().item()
+                vmax_label = label.max().item()
+
+                n_cols = 2 + n_samples
+                fig, axes = plt.subplots(1, n_cols, figsize=(3 * n_cols, 3))
+
+                # wrapped
+                axes[0].set_title("wrapped")
+                im0 = axes[0].imshow(wrapped, cmap='hsv', vmin=-3.1416, vmax=3.1416)
+                axes[0].axis('off')
+                fig.colorbar(im0, ax=axes[0], fraction=0.046, pad=0.04)
+
+                # label
+                axes[1].set_title("label")
+                im1 = axes[1].imshow(label, cmap='hsv', vmin=vmin_label, vmax=vmax_label)
+                axes[1].axis('off')
+                fig.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
+
+                # outputs
                 for k in range(n_samples):
-                    plt.subplot(1, n_samples, k+1)
-                    plt.title(f'sample {k}')
-                    plt.imshow(phi_hat[i, k, 0].cpu(), cmap='gray')
-                    plt.axis('off')
+                    axes[2 + k].set_title(f'pred {k}')
+                    imk = axes[2 + k].imshow(outputs[k], cmap='hsv', vmin=vmin_label, vmax=vmax_label)
+                    axes[2 + k].axis('off')
+                    fig.colorbar(imk, ax=axes[2 + k], fraction=0.046, pad=0.04)
+
                 plt.show()
-        encoder.train()
-        decoder.train()
+            encoder.train()
+            decoder.train()
 
     return encoder, decoder
 
