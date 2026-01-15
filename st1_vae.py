@@ -202,10 +202,10 @@ if __name__ == '__main__':
     # ---------------------------
     # 3. 指定 GPU
     # ---------------------------
-    gpu_id = 1  # 可修改为 0/1/2
+    device_str = cfg.train.get('device', 'cuda:0')
     if torch.cuda.is_available():
-        device = torch.device(f'cuda:{gpu_id}')
-        print(f"Using GPU {gpu_id} for training")
+        device = torch.device(device_str)
+        print(f"Using device: {device}")
     else:
         device = torch.device('cpu')
         print("CUDA not available, using CPU")
