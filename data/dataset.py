@@ -60,6 +60,11 @@ class PhaseDataset(Dataset):
             phi_path = os.path.join(self.phi_dir, self.phi_files[idx])
             phi = self._load_mat(phi_path, self.phi_key)
 
+        if x.dim() == 2:
+            x = x.unsqueeze(0)
+        if phi is not None and phi.dim() == 2:
+            phi = phi.unsqueeze(0)
+
         if self.transform:
             x = self.transform(x)
             if phi is not None:

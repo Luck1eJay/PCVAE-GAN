@@ -12,7 +12,7 @@ train:
   num_epochs_stage2: 50
   num_epochs_stage3: 50
   checkpoint_dir: checkpoints
-  device: cuda:1
+  device: cuda:0
 
 data:
   sim_data: "dataset/train/train_wrapped"    # 模拟缠绕相位
