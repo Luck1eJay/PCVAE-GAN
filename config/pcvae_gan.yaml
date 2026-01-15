@@ -12,12 +12,14 @@ train:
   num_epochs_stage2: 50
   num_epochs_stage3: 50
   checkpoint_dir: checkpoints
-  device: cuda
+  device: cuda:1
 
 data:
-  sim_data: "/dataset/train/wrapped"    # 模拟缠绕相位
-  sim_phi: "/dataset/train/labels"     # 模拟连续相位
-  real_data: "/dataset/real"   # 真实 wrap 数据
+  sim_data: "dataset/train/wrapped"    # 模拟缠绕相位
+  sim_phi: "dataset/train/labels"     # 模拟连续相位
+  real_data: "dataset/real"   # 真实 wrap 数据
+  wrap_key: "input"
+  phi_key: "output"
 
 loss:
   beta: 1.0           # KL 损失权重
