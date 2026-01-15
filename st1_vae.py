@@ -104,6 +104,9 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
             # ---------------------------
             loss_div = diversity_loss(phi_hat.squeeze(2))  # [B, K, H, W]
 
+            print("x_sim range:", x_sim.min().item(), x_sim.max().item())
+            print("phi_sim range:", phi_sim.min().item(), phi_sim.max().item())
+            print("loss_geo:", loss_geo.item(), "loss_kl:", loss_kl.item(), "loss_div:", loss_div.item())
             # ---------------------------
             # 总损失
             # ---------------------------
