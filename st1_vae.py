@@ -124,24 +124,25 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
             K = n_samples
             phi_hat_squeezed = phi_hat.squeeze(2)  # [B, K, H, W]
             phi_sim_expand = phi_sim.unsqueeze(1).expand(-1, K, -1, -1, -1)  # [B, K, H, W]
+            phi_sim_expand_squeezed = phi_sim_expand.squeeze(2)  # [B, K, H, W]
 
-            # per-sample mean L1 (over pixels)
-            B, K, H, W = phi_hat_squeezed.shape
-            recon_l1_per_pixel = (phi_hat_squeezed - phi_sim_expand).abs()  # [B, K, H, W]
-            recon_l1 = recon_l1_per_pixel.view(B, K, -1).mean(dim=2)  # [B, K]  per-sample mean L1
+            # Now compute per-pixel absolute diffs exactly like your working snippet
+            l1_all = torch.abs(phi_hat_squeezed - phi_sim_expand_squeezed)  # [B, K, H, W]
+            l1_mean = l1_all.view(batch_size, K, -1).mean(dim=2)  # [B, K]  per-sample mean L1
+            recon_l1 = l1_mean  # [B, K]
 
             # approximate log p(x|z) via negative scaled L1
             log_px_z = - recon_scale * recon_l1  # [B, K]
 
             # log p(z) under standard normal prior (ignore constants)
-            z_flat = z.view(B * K, latent_dim)
-            log_pz = (-0.5 * (z_flat ** 2).sum(dim=1)).view(B, K)  # [B, K]
+            z_flat = z.view(batch_size * K, latent_dim)
+            log_pz = (-0.5 * (z_flat ** 2).sum(dim=1)).view(batch_size, K)  # [B, K]
 
             # log q(z|x) for Gaussian q = N(mu, sigma^2)
-            mu_exp = mu.unsqueeze(1).expand(-1, K, -1).contiguous().view(B * K, latent_dim)
-            logvar_exp = logvar.unsqueeze(1).expand(-1, K, -1).contiguous().view(B * K, latent_dim)
+            mu_exp = mu.unsqueeze(1).expand(-1, K, -1).contiguous().view(batch_size * K, latent_dim)
+            logvar_exp = logvar.unsqueeze(1).expand(-1, K, -1).contiguous().view(batch_size * K, latent_dim)
             var_exp = torch.exp(logvar_exp)
-            log_qz_x = (-0.5 * (((z_flat - mu_exp) ** 2) / var_exp + logvar_exp).sum(dim=1)).view(B, K)
+            log_qz_x = (-0.5 * (((z_flat - mu_exp) ** 2) / var_exp + logvar_exp).sum(dim=1)).view(batch_size, K)
 
             # importance log weights
             log_w = log_px_z + log_pz - log_qz_x  # [B, K]
@@ -155,7 +156,7 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
             weights = torch.softmax(log_w, dim=1)  # [B, K]
 
             # weighted reconstruction for gradient loss
-            w_view = weights.view(B, K, 1, 1)
+            w_view = weights.view(batch_size, K, 1, 1)
             phi_hat_weighted = (w_view * phi_hat_squeezed).sum(dim=1, keepdim=True)  # [B,1,H,W]
 
             # gradient consistency loss on weighted reconstruction
@@ -184,7 +185,7 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
                 # weight entropy per sample then mean
                 w_entropy_batch = float((-(weights * (weights + 1e-12).log()).sum(dim=1)).mean().item())
                 # per-pixel std across K averaged over batch (diversity)
-                per_pixel_std_batch = float(phi_hat_squeezed.std(dim=1).view(B, -1).mean().item())
+                per_pixel_std_batch = float(phi_hat_squeezed.std(dim=1).view(batch_size, -1).mean().item())
 
             total_iwae_epoch += float(loss_iwae.item())
             total_kl_epoch += float(loss_kl.item())
