@@ -4,15 +4,15 @@ model:
   latent_dim: 64
 
 train:
-  batch_size: 128
-  lr_encoder: 1e-4
-  lr_discriminator: 1e-4
-  lr_decoder: 1e-4
-  num_epochs_stage1: 50
+  batch_size: 16
+  lr_encoder: 1e-3
+  lr_discriminator: 1e-3
+  lr_decoder: 1e-3
+  num_epochs_stage1: 200
   num_epochs_stage2: 50
   num_epochs_stage3: 50
-  checkpoint_dir: checkpoints
-  device: cuda:0
+  checkpoint_dir: checkpoints5
+  device: cuda:1
 
 data:
   sim_data: "dataset/train/train_wrapped"    # 模拟缠绕相位
@@ -23,10 +23,12 @@ data:
 
 loss:
   beta: 0.1           # KL 损失权重
-  lambda_div: 0.1     # 多解多样性权重
+  lambda_div: 0.5     # 多解多样性权重
   lambda_gp: 10.0     # R3GAN gradient penalty
   lambda_wrap: 1.0    # wrap/物理损失权重
-  lambda_grad: 0.3    # gradient loss 权重
+  lambda_grad: 5    # gradient loss 权重
+  lambda_geo: 5     # geo损失
+
 
 # -----------------------------
 # Finetune Settings

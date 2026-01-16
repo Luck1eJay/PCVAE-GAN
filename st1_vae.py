@@ -31,6 +31,8 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
     lambda_kl = loss_cfg.get('beta', 1.0)
     # lambda_div = loss_cfg.get('lambda_div', 0.1)
     lambda_grad = loss_cfg.get('lambda_grad', 1.0)
+    lambda_geo = loss_cfg.get('lambda_geo', 1.0)
+
     # ---------------------------
     # 模型
     # ---------------------------
@@ -110,22 +112,15 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
             # ---------------------------
             # diversity loss
             # ---------------------------
+
             # loss_div = diversity_loss(phi_hat.squeeze(2))  # [B, K, H, W]
 
 
-            print("x_sim range:", x_sim.min().item(), x_sim.max().item())
-            print("phi_sim range:", phi_sim.min().item(), phi_sim.max().item())
-            print(
-                "loss_geo:", loss_geo.item(),
-                "loss_kl:", loss_kl.item(),
-                # "loss_div:", loss_div.item(),
-                "loss_grad:", loss_grad.item()
-            )
             # ---------------------------
             # 总损失
             # ---------------------------
             # loss_total = loss_geo + lambda_kl * loss_kl + lambda_div * loss_div + lambda_grad * loss_grad
-            loss_total = loss_geo + lambda_kl * loss_kl  + lambda_grad * loss_grad
+            loss_total = lambda_geo * loss_geo + lambda_kl * loss_kl  + lambda_grad * loss_grad
 
             opt_enc.zero_grad()
             opt_dec.zero_grad()
