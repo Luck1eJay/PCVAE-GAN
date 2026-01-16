@@ -1,7 +1,7 @@
 # config/pcvae_gan_finetune.yaml
 model:
   name: PCVAE-GAN
-  latent_dim: 64
+  latent_dim: 128
 
 train:
   batch_size: 16

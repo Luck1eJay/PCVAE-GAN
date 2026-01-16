@@ -197,23 +197,34 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
             print(f"Checkpoint saved: {checkpoint_path}")
 
         # ---------------------------
-        # 可视化：wrapped + labels + 多解输出（每张子图独立 colorbar）
+        # 可视化：wrapped + labels + 最优解
         # ---------------------------
         if last_phi_hat is not None:
             encoder.eval()
             decoder.eval()
             with torch.no_grad():
-                idx = last_phi_hat.size(0) - 1  # 最后一张
-                wrapped = last_x_sim[idx, 0].cpu()
-                label = last_phi_sim[idx, 0].cpu()
+                # 选择 batch 中最后一个样本用于可视化（和原实现一致）
+                idx = last_phi_hat.size(0) - 1
+                wrapped = last_x_sim[idx, 0].cpu()  # [H, W]
+                label = last_phi_sim[idx, 0].cpu()  # [H, W]
                 outputs = last_phi_hat[idx, :, 0].cpu()  # [K, H, W]
 
-                # labels 与 outputs 使用同一范围（真实相位范围）
-                vmin_label = label.min().item()
-                vmax_label = label.max().item()
+                # 计算每个预测与 label 的平均 L1（按像素平均）
+                # outputs: [K, H, W], label: [H, W] -> broadcast
+                diffs = (outputs - label.unsqueeze(0)).abs()  # [K, H, W]
+                l1_per_k = diffs.view(diffs.size(0), -1).mean(dim=1)  # [K]
 
-                n_cols = 2 + n_samples
-                fig, axes = plt.subplots(1, n_cols, figsize=(3 * n_cols, 3))
+                # 找到与 label 最近的预测索引
+                best_k = int(torch.argmin(l1_per_k).item())
+                best_output = outputs[best_k]  # [H, W]
+                best_l1 = float(l1_per_k[best_k].item())
+
+                # 打印诊断信息
+                print(f"[Vis] best_pred_index={best_k}, best_mean_L1={best_l1:.6f}")
+
+                # 绘图：只显示 wrapped / label / best_pred 三列
+                n_cols = 3
+                fig, axes = plt.subplots(1, n_cols, figsize=(4 * n_cols, 4))
 
                 # wrapped
                 axes[0].set_title("wrapped")
@@ -223,17 +234,17 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
 
                 # label
                 axes[1].set_title("label")
-                im1 = axes[1].imshow(label, cmap='hsv', vmin=vmin_label, vmax=vmax_label)
+                im1 = axes[1].imshow(label, cmap='hsv', vmin=label.min().item(), vmax=label.max().item())
                 axes[1].axis('off')
                 fig.colorbar(im1, ax=axes[1], fraction=0.046, pad=0.04)
 
-                # outputs
-                for k in range(n_samples):
-                    axes[2 + k].set_title(f'pred {k}')
-                    imk = axes[2 + k].imshow(outputs[k], cmap='hsv', vmin=vmin_label, vmax=vmax_label)
-                    axes[2 + k].axis('off')
-                    fig.colorbar(imk, ax=axes[2 + k], fraction=0.046, pad=0.04)
+                # best prediction
+                axes[2].set_title(f'best pred (k={best_k})')
+                im2 = axes[2].imshow(best_output, cmap='hsv', vmin=label.min().item(), vmax=label.max().item())
+                axes[2].axis('off')
+                fig.colorbar(im2, ax=axes[2], fraction=0.046, pad=0.04)
 
+                plt.tight_layout()
                 plt.show()
             encoder.train()
             decoder.train()
