@@ -4,7 +4,7 @@ model:
   latent_dim: 128
 
 train:
-  batch_size: 16
+  batch_size: 64
   lr_encoder: 1e-3
   lr_discriminator: 1e-3
   lr_decoder: 1e-3
@@ -30,7 +30,7 @@ loss:
   lambda_grad: 5    # gradient loss 权重
   lambda_geo: 5     # geo损失
   # recon_scale: 用于把 L1 映射到 log p(x|z) 的尺度（影响 IWAE 权重）
-  recon_scale: 1.0
+  recon_scale: 5
 
 # -----------------------------
 # Finetune Settings
