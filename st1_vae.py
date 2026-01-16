@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
 
 from models.encoder import Encoder
 from models.decoder import Decoder
@@ -33,6 +34,8 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
     lambda_grad = loss_cfg.get('lambda_grad', 1.0)
     lambda_geo = loss_cfg.get('lambda_geo', 1.0)
 
+    # recon_scale: 用来把 L1 映射到 log p(x|z) 的尺度（IWAE 权重敏感项）
+    recon_scale = loss_cfg.get('recon_scale', 1.0)
     # ---------------------------
     # 模型
     # ---------------------------
@@ -91,19 +94,62 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
             last_phi_sim = phi_sim
             last_phi_hat = phi_hat
 
+            # # ---------------------------
+            # # 监督损失: best-of-K L1
+            # # ---------------------------
+            # # phi_sim: [B, 1, H, W] -> 扩展到 [B, K, 1, H, W] 方便计算
+            # phi_sim_expand = phi_sim.unsqueeze(1).expand(-1, n_samples, -1, -1, -1)
+            # l1_all = torch.abs(phi_hat.squeeze(2) - phi_sim_expand.squeeze(2))  # [B, K, H, W]
+            # l1_mean = l1_all.view(batch_size, n_samples, -1).mean(dim=2)
+            # loss_geo = l1_mean.min(dim=1)[0].mean()  # best-of-K
+            #
+            # best_idx = l1_mean.min(dim=1)[1]
+            # phi_hat_best = phi_hat[torch.arange(batch_size, device=device), best_idx, :, :, :]  # [B, 1, H, W]
+            # loss_grad = gradient_loss(phi_hat_best, phi_sim)
+
             # ---------------------------
-            # 监督损失: best-of-K L1
+            # 监督损失: 用 IWAE 替代 best-of-K，并用 L1 构造 log p(x|z)
             # ---------------------------
             # phi_sim: [B, 1, H, W] -> 扩展到 [B, K, 1, H, W] 方便计算
-            phi_sim_expand = phi_sim.unsqueeze(1).expand(-1, n_samples, -1, -1, -1)
-            l1_all = torch.abs(phi_hat.squeeze(2) - phi_sim_expand.squeeze(2))  # [B, K, H, W]
-            l1_mean = l1_all.view(batch_size, n_samples, -1).mean(dim=2)
-            loss_geo = l1_mean.min(dim=1)[0].mean()  # best-of-K
+            K = n_samples
+            phi_hat_squeezed = phi_hat.squeeze(2)  # [B, K, H, W]
+            phi_sim_expand = phi_sim.unsqueeze(1).expand(-1, K, -1, -1, -1)  # [B, K, H, W]
 
-            best_idx = l1_mean.min(dim=1)[1]
-            phi_hat_best = phi_hat[torch.arange(batch_size, device=device), best_idx, :, :, :]  # [B, 1, H, W]
-            loss_grad = gradient_loss(phi_hat_best, phi_sim)
+            # per-sample mean L1 (over pixels)
+            B, K, H, W = phi_hat_squeezed.shape
+            recon_l1_per_pixel = (phi_hat_squeezed - phi_sim_expand).abs()  # [B, K, H, W]
+            recon_l1 = recon_l1_per_pixel.view(B, K, -1).mean(dim=2)  # [B, K]  per-sample mean L1
 
+            # approximate log p(x|z) via negative scaled L1
+            log_px_z = - recon_scale * recon_l1  # [B, K]
+
+            # log p(z) under standard normal prior (ignore constants)
+            z_flat = z.view(B * K, latent_dim)
+            log_pz = (-0.5 * (z_flat ** 2).sum(dim=1)).view(B, K)  # [B, K]
+
+            # log q(z|x) for Gaussian q = N(mu, sigma^2)
+            mu_exp = mu.unsqueeze(1).expand(-1, K, -1).contiguous().view(B * K, latent_dim)
+            logvar_exp = logvar.unsqueeze(1).expand(-1, K, -1).contiguous().view(B * K, latent_dim)
+            var_exp = torch.exp(logvar_exp)
+            log_qz_x = (-0.5 * (((z_flat - mu_exp) ** 2) / var_exp + logvar_exp).sum(dim=1)).view(B, K)
+
+            # importance log weights
+            log_w = log_px_z + log_pz - log_qz_x  # [B, K]
+
+            # stable IWAE estimate: log(1/K * sum_k w_k)
+            max_log_w, _ = log_w.max(dim=1, keepdim=True)  # [B,1]
+            log_mean_w = (max_log_w.squeeze(1) + torch.log(torch.exp(log_w - max_log_w).mean(dim=1)))  # [B]
+            loss_iwae = - log_mean_w.mean()  # scalar, negative IWAE lower bound
+
+            # normalized importance weights
+            weights = torch.softmax(log_w, dim=1)  # [B, K]
+
+            # weighted reconstruction for gradient loss
+            w_view = weights.view(B, K, 1, 1)
+            phi_hat_weighted = (w_view * phi_hat_squeezed).sum(dim=1, keepdim=True)  # [B,1,H,W]
+
+            # gradient consistency loss on weighted reconstruction
+            loss_grad = gradient_loss(phi_hat_weighted, phi_sim)
             # ---------------------------
             # KL loss
             # ---------------------------
@@ -120,7 +166,8 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
             # 总损失
             # ---------------------------
             # loss_total = loss_geo + lambda_kl * loss_kl + lambda_div * loss_div + lambda_grad * loss_grad
-            loss_total = lambda_geo * loss_geo + lambda_kl * loss_kl  + lambda_grad * loss_grad
+            # loss_total = lambda_geo * loss_geo + lambda_kl * loss_kl  + lambda_grad * loss_grad
+            loss_total = lambda_geo * loss_iwae + lambda_kl * loss_kl  + lambda_grad * loss_grad
 
             opt_enc.zero_grad()
             opt_dec.zero_grad()
