@@ -13,7 +13,8 @@ train:
   num_epochs_stage3: 50
   checkpoint_dir: checkpoints5
   device: cuda:1
-
+  # n_samples 用于 Stage1 中每个输入采样的 K（与 st1_vae.train_stage1 的 n_samples 对应）
+  n_samples_stage1: 5
 data:
   sim_data: "dataset/train/train_wrapped"    # 模拟缠绕相位
   sim_phi: "dataset/train/train_absolute"     # 模拟连续相位
@@ -28,7 +29,8 @@ loss:
   lambda_wrap: 1.0    # wrap/物理损失权重
   lambda_grad: 5    # gradient loss 权重
   lambda_geo: 5     # geo损失
-
+  # recon_scale: 用于把 L1 映射到 log p(x|z) 的尺度（影响 IWAE 权重）
+  recon_scale: 1.0
 
 # -----------------------------
 # Finetune Settings

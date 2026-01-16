@@ -4,7 +4,6 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
-import torch.nn.functional as F
 
 from models.encoder import Encoder
 from models.decoder import Decoder
@@ -34,6 +33,8 @@ def train_stage1(cfg, checkpoint_dir, device='cuda', n_samples=5):
     lambda_grad = loss_cfg.get('lambda_grad', 1.0)
     lambda_geo = loss_cfg.get('lambda_geo', 1.0)
 
+    # Allow n_samples to be set from config (overrides function arg)
+    n_samples = int(train_cfg.get('n_samples_stage1', n_samples))
     # recon_scale: 用来把 L1 映射到 log p(x|z) 的尺度（IWAE 权重敏感项）
     recon_scale = loss_cfg.get('recon_scale', 1.0)
     # ---------------------------
