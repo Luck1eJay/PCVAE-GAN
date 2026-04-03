@@ -1,34 +1,36 @@
 # config/pcvae_gan_finetune.yaml
 model:
   name: PCVAE-GAN
-  latent_dim: 128
+  latent_channels: 64
 
 train:
-  batch_size: 64
-  lr_encoder: 1e-3
-  lr_discriminator: 1e-3
-  lr_decoder: 1e-3
+  batch_size: 128
+  lr_encoder: 1e-4
+  lr_discriminator: 1e-2
+  lr_decoder: 1e-4
   num_epochs_stage1: 200
   num_epochs_stage2: 50
   num_epochs_stage3: 50
-  checkpoint_dir: checkpoints5
-  device: cuda:1
+  checkpoint_dir: checkpointsVAE2
+  device: cuda:0
+  warmup_epochs: 100        # VAE 训练的预热 epoch 数
+  anneal_epochs:  100
   # n_samples 用于 Stage1 中每个输入采样的 K（与 st1_vae.train_stage1 的 n_samples 对应）
-  n_samples_stage1: 5
+  n_samples_stage1: 1
 data:
-  sim_data: "dataset/train/train_wrapped"    # 模拟缠绕相位
-  sim_phi: "dataset/train/train_absolute"     # 模拟连续相位
-  real_data: "dataset/real"   # 真实 wrap 数据
+  sim_wrap: DATA/TEST/WRAP
+  sim_true: DATA/TEST/TRUE
+  real_wrap: DATA/REAL
   wrap_key: "input"
   phi_key: "output"
 
 loss:
-  beta: 0.1           # KL 损失权重
+  beta: 0.001           # KL 损失权重
   lambda_div: 0.5     # 多解多样性权重
   lambda_gp: 10.0     # R3GAN gradient penalty
   lambda_wrap: 1.0    # wrap/物理损失权重
   lambda_grad: 5    # gradient loss 权重
-  lambda_geo: 5     # geo损失
+  lambda_geo: 1     # geo损失
   # recon_scale: 用于把 L1 映射到 log p(x|z) 的尺度（影响 IWAE 权重）
   recon_scale: 5
 

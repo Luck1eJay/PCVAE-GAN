@@ -1,26 +1,24 @@
-import torch
+# vae_loss.py
 import torch.nn.functional as F
 
 def kl_loss(mu, logvar):
     """
-    KL Divergence between latent distribution and N(0,I)
-    mu: [batch, latent_dim]
-    logvar: [batch, latent_dim]
+    KL散度损失
+    支持：mu, logvar 为单层 (tensor) 或多层 (list of tensor)
+    Shape: [B, C, H, W] 或 [B, D] (单层)；多层则为列表
     """
-    return -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+    if isinstance(mu, list):  # 多层KL
+        return sum([
+            -0.5 * (1 + lv - mu_.pow(2) - lv.exp()).mean()
+            for mu_, lv in zip(mu, logvar)
+        ])
+    else:  # 单层KL
+        return -0.5 * (1 + logvar - mu.pow(2) - logvar.exp()).mean()
 
-def geo_loss(phi_hat, phi_sim):
+def vae_loss(phi_hat, phi, mu, logvar, lambda_geo=1.0, lambda_kl=1e-4):
     """
-    L1 Reconstruction loss on simulated data
-    phi_hat: [batch, H, W]
-    phi_sim: [batch, H, W]
+    综合VAE损失：重建 + KL
     """
-    return F.l1_loss(phi_hat, phi_sim)
-
-def vae_loss(phi_hat, phi_sim, mu, logvar, lambda_geo=1.0, lambda_kl=0.01):
-    """
-    Combined VAE loss: weighted sum of geo + KL
-    """
-    loss_geo = geo_loss(phi_hat, phi_sim)
+    loss_geo = F.l1_loss(phi_hat, phi)
     loss_kl = kl_loss(mu, logvar)
-    return lambda_geo * loss_geo + lambda_kl * loss_kl
+    return lambda_geo * loss_geo + lambda_kl * loss_kl, loss_geo, loss_kl
