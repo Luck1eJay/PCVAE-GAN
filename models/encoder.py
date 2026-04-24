@@ -1,75 +1,76 @@
-import torch
+﻿import torch
 import torch.nn as nn
-
+def _group_norm(channels, max_groups=8):
+    groups = min(max_groups, channels)
+    while groups > 1 and channels % groups != 0:
+        groups -= 1
+    return nn.GroupNorm(groups, channels)
 class ResBlock(nn.Module):
     def __init__(self, channels):
-        super().__init__()
+        super(ResBlock, self).__init__()
         self.block = nn.Sequential(
             nn.Conv2d(channels, channels, 3, padding=1),
-            nn.GroupNorm(8, channels),
+            _group_norm(channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(channels, channels, 3, padding=1),
-            nn.GroupNorm(8, channels),
+            _group_norm(channels),
         )
+        self.act = nn.ReLU(inplace=True)
     def forward(self, x):
-        return nn.ReLU(inplace=True)(x + self.block(x))
-
+        return self.act(x + self.block(x))
 class NVAEEncoder(nn.Module):
-    def __init__(self, input_channels=1, base_channels=32, latent_channels=64):
-        super().__init__()
-        self.enc1 = nn.Sequential(
-            nn.Conv2d(input_channels, base_channels, 3, stride=2, padding=1), # 256→128
-            nn.GroupNorm(8, base_channels),
-            nn.ReLU(inplace=True),
-            ResBlock(base_channels)
-        )
-        self.enc2 = nn.Sequential(
-            nn.Conv2d(base_channels, base_channels*2, 3, stride=2, padding=1), # 128→64
-            nn.GroupNorm(8, base_channels*2),
-            nn.ReLU(inplace=True),
-            ResBlock(base_channels*2)
-        )
-        self.enc3 = nn.Sequential(
-            nn.Conv2d(base_channels*2, base_channels*4, 3, stride=2, padding=1), # 64→32
-            nn.GroupNorm(8, base_channels*4),
-            nn.ReLU(inplace=True),
-            ResBlock(base_channels*4)
-        )
-        self.enc4 = nn.Sequential(
-            nn.Conv2d(base_channels*4, base_channels*8, 3, stride=2, padding=1), # 32→16
-            nn.GroupNorm(8, base_channels*8),
-            nn.ReLU(inplace=True),
-            ResBlock(base_channels*8)
-        )
-        self.mu_logvar1 = nn.Conv2d(base_channels, latent_channels*2, 1)
-        self.mu_logvar2 = nn.Conv2d(base_channels*2, latent_channels*2, 1)
-        self.mu_logvar3 = nn.Conv2d(base_channels*4, latent_channels*2, 1)
-        self.mu_logvar4 = nn.Conv2d(base_channels*8, latent_channels*2, 1)
-
+    """Five-level encoder that produces z1~z5 posterior parameters."""
+    def __init__(self, input_channels=1, base_channels=32, latent_channels=64, latent_levels=5, *args, **kwargs):
+        super(NVAEEncoder, self).__init__()
+        if latent_levels != 5:
+            raise ValueError('This compatibility implementation expects latent_levels=5')
+        self.input_channels = int(input_channels)
+        self.base_channels = int(base_channels)
+        self.latent_channels = int(latent_channels)
+        self.latent_levels = int(latent_levels)
+        # 256 -> 128 -> 64 -> 32 -> 16 -> 8
+        channel_multipliers = [1, 2, 4, 8, 8]
+        feature_channels = [self.base_channels * m for m in channel_multipliers]
+        self.feature_channels = feature_channels
+        down_blocks = []
+        in_ch = self.input_channels
+        for out_ch in feature_channels:
+            down_blocks.append(
+                nn.Sequential(
+                    nn.Conv2d(in_ch, out_ch, 3, stride=2, padding=1),
+                    _group_norm(out_ch),
+                    nn.ReLU(inplace=True),
+                    ResBlock(out_ch),
+                )
+            )
+            in_ch = out_ch
+        self.down_blocks = nn.ModuleList(down_blocks)
+        self.mu_logvar_heads = nn.ModuleList([
+            nn.Conv2d(ch, self.latent_channels * 2, 1) for ch in feature_channels
+        ])
     def forward(self, x):
         features = []
-        x1 = self.enc1(x)  # [B, C, 128, 128]
-        features.append(x1)
-        x2 = self.enc2(x1) # [B, 2C, 64, 64]
-        features.append(x2)
-        x3 = self.enc3(x2) # [B, 4C, 32, 32]
-        features.append(x3)
-        x4 = self.enc4(x3) # [B, 8C, 16, 16]
-        features.append(x4)
-
+        h = x
+        for block in self.down_blocks:
+            h = block(h)
+            features.append(h)
         mus, logvars = [], []
-        for feat, conv in zip(features, [self.mu_logvar1, self.mu_logvar2, self.mu_logvar3, self.mu_logvar4]):
-            mu_logvar = conv(feat)
+        for feat, head in zip(features, self.mu_logvar_heads):
+            mu_logvar = head(feat)
             mu, logvar = torch.chunk(mu_logvar, 2, dim=1)
             mus.append(mu)
             logvars.append(logvar)
         return mus, logvars
-
-    def sample(self, mus, logvars):
+    def sample(self, mus, logvars, deterministic=False):
+        if len(mus) != len(logvars):
+            raise ValueError('mus and logvars must have the same length')
         zs = []
         for mu, logvar in zip(mus, logvars):
-            std = torch.exp(0.5 * logvar)
-            eps = torch.randn_like(std)
-            zs.append(mu + eps * std)
-        return zs  # [z1: 128x128, z2: 64x64, z3:32x32, z4: 16x16]
-
+            if deterministic:
+                zs.append(mu)
+            else:
+                std = torch.exp(0.5 * logvar)
+                zs.append(mu + torch.randn_like(std) * std)
+        return zs
+# Legacy compatibility alias
+Encoder = NVAEEncoder

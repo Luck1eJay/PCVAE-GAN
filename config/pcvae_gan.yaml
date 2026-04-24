@@ -1,47 +1,43 @@
-# config/pcvae_gan_finetune.yaml
+﻿# config/pcvae_gan.yaml
 model:
   name: PCVAE-GAN
   latent_channels: 64
-
+  latent_levels: 5
+  base_channels: 32
+  output_channels: 1
+  strict_hierarchical: true
+  legacy_output: true
+  use_z5_vq: true
+  vq_num_embeddings: 64
+  vq_commitment_cost: 0.25
 train:
   batch_size: 128
   lr_encoder: 1e-4
-  lr_discriminator: 1e-2
   lr_decoder: 1e-4
   num_epochs_stage1: 200
-  num_epochs_stage2: 50
-  num_epochs_stage3: 50
-  checkpoint_dir: checkpointsVAE2
+  checkpoint_dir: checkpointsVAE2_vq
   device: cuda:0
-  warmup_epochs: 100        # VAE 训练的预热 epoch 数
-  anneal_epochs:  100
-  # n_samples 用于 Stage1 中每个输入采样的 K（与 st1_vae.train_stage1 的 n_samples 对应）
-  n_samples_stage1: 1
+  stage1_init_ckpt: ""
+  save_interval_stage1: 10
 data:
-  sim_wrap: DATA/TEST/WRAP
-  sim_true: DATA/TEST/TRUE
+  sim_wrap: dataset/train/train_wrapped
+  sim_true: dataset/train/train_absolute
+  test_wrap: dataset/test/test_wrapped
+  test_wrapped: dataset/test/test_wrapped
+  test_true: dataset/test/test_absolute
+  test_absolute: dataset/test/test_absolute
+  test_phi: dataset/test/test_absolute
   real_wrap: DATA/REAL
-  wrap_key: "input"
-  phi_key: "output"
-
+  wrap_key: input
+  phi_key: output
 loss:
-  beta: 0.001           # KL 损失权重
-  lambda_div: 0.5     # 多解多样性权重
-  lambda_gp: 10.0     # R3GAN gradient penalty
-  lambda_wrap: 1.0    # wrap/物理损失权重
-  lambda_grad: 5    # gradient loss 权重
-  lambda_geo: 1     # geo损失
-  # recon_scale: 用于把 L1 映射到 log p(x|z) 的尺度（影响 IWAE 权重）
+  beta: 0.001
+  kl_weights: [1.0, 1.0, 1.0, 1.0, 1.0]
+  free_bits: 0.0
+  lambda_vq: 0.25
   recon_scale: 5
-
-# -----------------------------
-# Finetune Settings
-# -----------------------------
-finetune:
-  enable: true
-  stage_to_start: 2                 # 从 Stage2 或 Stage3 开始微调
-  load_checkpoint: "checkpoints/stage2/checkpoint_epoch50.pth"  # 要加载的 checkpoint
-  freeze_decoder: true              # 是否冻结 decoder
-  new_lr_encoder: 1e-5              # 微调 encoder 的新学习率
-  new_lr_discriminator: 1e-5        # 微调 discriminator 的新学习率
-  new_lr_decoder: 1e-5               # 微调 decoder 学习率（如果未冻结）
+test:
+  device: cuda:0
+  checkpoint: ""
+  model_path: ""
+  out_dir: test_results
